@@ -188,7 +188,8 @@
     .gantt .popup-wrapper .pointer {
       border-top-color: #1a1a1a !important;
     }
-    /* Clases personalizadas para estados (mapeo desde "Estado") */
+
+    /* --- Clases para los estados (mapeo desde custom_class) --- */
     .gantt .bar.estado-abierto {
       background: #dc2626 !important;
     }
@@ -204,10 +205,7 @@
     .gantt .bar.estado-default {
       background: #6b7280 !important;
     }
-    /* Ajuste para el progreso dentro de la barra */
-    .gantt .bar-progress {
-      background: rgba(255,255,255,0.25) !important;
-    }
+
     /* Responsive */
     @media (max-width: 640px) {
       #search-input {
@@ -224,7 +222,7 @@
   <!-- Header -->
   <header class="flex flex-wrap items-center justify-between gap-4 mb-6 glass-card">
     <h1 class="text-2xl font-semibold tracking-tight flex items-center gap-2">
-      <span class="accent-red"></span> Dashboard Gantt
+      <span class="accent-red">📊</span> Dashboard Gantt
     </h1>
     <div class="flex flex-wrap items-center gap-3">
       <input
@@ -268,11 +266,12 @@
       'use strict';
 
       // ---------- CONFIGURACIÓN ----------
-      // Cambiar esta URL por la de tu Web App de Apps Script
-      const API_URL = 'https://script.google.com/macros/s/AKfycbyCRfzjwQr6Ejr_189PluWWKbsFquMS0rv4fAPLRxN0pu4_GWUUSRxeddWBfIgEeLu9YQ/exec'; // Reemplazar
+      // ¡REEMPLAZA ESTA URL CON LA DE TU WEB APP DE APPS SCRIPT!
+      const API_URL = 'https://script.google.com/macros/s/AKfycbyCRfzjwQr6Ejr_189PluWWKbsFquMS0rv4fAPLRxN0pu4_GWUUSRxeddWBfIgEeLu9YQ/exec';
 
       // ---------- ELEMENTOS DOM ----------
-      const ganttContainer = document.getElementById('gantt');
+      const ganttContainer = document.getElementById('gantt-container');
+      const ganttEl = document.getElementById('gantt');
       const loaderEl = document.getElementById('loader');
       const statusMsg = document.getElementById('status-message');
       const statusText = document.getElementById('status-text');
@@ -320,16 +319,7 @@
       async function loadData() {
         // Mostrar loader, ocultar gantt y mensajes
         loaderEl.style.display = 'flex';
-        ganttContainer.style.display = 'block';
-        ganttContainer.style.minHeight = '400px';
-        ganttContainer.style.position = 'relative';
-        ganttContainer.style.overflow = 'hidden';
-        ganttContainer.style.padding = '20px';
-        ganttContainer.style.background = '#111111'; // mantener fondo
-        ganttContainer.style.border = '1px solid #262626';
-        ganttContainer.style.borderRadius = '16px';
-        
-        ganttContainer.querySelector('#gantt').style.display = 'none';
+        ganttEl.style.display = 'none';
         statusMsg.style.display = 'none';
 
         try {
@@ -339,8 +329,7 @@
           }
           const data = await response.json();
 
-          // Esperamos que la API devuelva un objeto con una propiedad "sections"
-          // que sea un array de secciones, cada una con { name, tasks: [ { id, name, start, end, progress, custom_class, ... } ] }
+          // Esperamos que la API devuelva un objeto con "sections"
           if (!data || typeof data !== 'object' || !Array.isArray(data.sections)) {
             throw new Error('La respuesta no contiene "sections" válido');
           }
@@ -350,18 +339,17 @@
           // Aplicar filtro si existe
           const filtered = applyFilter(allSections, currentFilter);
           renderGantt(filtered);
-          
+
           // Ocultar loader
           loaderEl.style.display = 'none';
-          
+
           if (filtered.length === 0 || filtered.every(s => s.tasks.length === 0)) {
-            // Mostrar mensaje de vacío
             statusMsg.style.display = 'block';
             statusText.textContent = allSections.length === 0 ? 'No hay datos cargados.' : 'No hay tareas que coincidan con la búsqueda.';
-            ganttContainer.querySelector('#gantt').style.display = 'none';
+            ganttEl.style.display = 'none';
           } else {
             statusMsg.style.display = 'none';
-            ganttContainer.querySelector('#gantt').style.display = 'block';
+            ganttEl.style.display = 'block';
           }
 
           showToast('Datos actualizados correctamente', 'success', 2000);
@@ -371,7 +359,7 @@
           loaderEl.style.display = 'none';
           statusMsg.style.display = 'block';
           statusText.textContent = `Error: ${error.message || 'No se pudieron cargar los datos.'}`;
-          ganttContainer.querySelector('#gantt').style.display = 'none';
+          ganttEl.style.display = 'none';
           showToast('Error al cargar datos: ' + error.message, 'error', 4000);
         }
       }
@@ -400,38 +388,37 @@
           ganttInstance = null;
         }
 
-        // Aplanar tareas para Frappe Gantt
+        // Aplanar tareas para Frappe Gantt, mapeando custom_class a clases con prefijo "estado-"
         const tasks = [];
         sections.forEach(section => {
           section.tasks.forEach(task => {
-            // Asegurar campos obligatorios
+            // Construir custom_class con prefijo "estado-"
+            const rawClass = task.custom_class || 'default';
+            const customClass = `estado-${rawClass}`;
+
             const t = {
               id: task.id || 'task-' + Math.random().toString(36).substr(2, 9),
               name: task.name || 'Sin nombre',
               start: task.start || new Date().toISOString().split('T')[0],
               end: task.end || new Date().toISOString().split('T')[0],
               progress: typeof task.progress === 'number' ? task.progress : 0,
-              custom_class: task.custom_class || 'estado-default'
+              custom_class: customClass
             };
             tasks.push(t);
           });
         });
 
         if (tasks.length === 0) {
-          // No hay tareas, mostrar mensaje
-          ganttContainer.querySelector('#gantt').style.display = 'none';
+          ganttEl.style.display = 'none';
           statusMsg.style.display = 'block';
           statusText.textContent = 'No hay tareas para mostrar.';
           return;
         }
 
-        // Ocultar mensaje de estado, mostrar gantt
         statusMsg.style.display = 'none';
-        const ganttEl = ganttContainer.querySelector('#gantt');
         ganttEl.style.display = 'block';
         ganttEl.innerHTML = ''; // limpiar
 
-        // Crear instancia
         try {
           ganttInstance = new Gantt('#gantt', tasks, {
             header_height: 50,
@@ -445,27 +432,19 @@
             date_format: 'YYYY-MM-DD',
             custom_popup_html: function(task) {
               // Mostrar información adicional en el popup
-              const extra = task.extra || '';
               return `
                 <div class="popup-content">
                   <div class="title">${task.name}</div>
                   <div class="subtitle">${task.start} → ${task.end}</div>
                   <div class="subtitle">Progreso: ${Math.round(task.progress * 100)}%</div>
-                  ${extra ? `<div class="subtitle">${extra}</div>` : ''}
                 </div>
               `;
             },
             on_date_change: function(task, start, end) {
-              // Cuando se arrastra o redimensiona
               saveTask(task.id, start, end, task.progress);
             },
             on_progress_change: function(task, progress) {
-              // Cuando se mueve el slider de progreso
               saveTask(task.id, task.start, task.end, progress);
-            },
-            on_click: function(task) {
-              // Opcional: mostrar detalles
-              // console.log('Tarea clickeada:', task);
             }
           });
         } catch (error) {
@@ -479,7 +458,6 @@
 
       // ---------- GUARDAR TAREA (POST) ----------
       async function saveTask(id, start, end, progress) {
-        // Mostrar toast de guardando
         showToast('Guardando cambios...', 'info', 1500);
 
         try {
@@ -490,24 +468,18 @@
             progress: progress
           };
 
-          const response = await fetch(API_URL, {
+          // Usamos mode: 'no-cors' porque Apps Script no permite CORS
+          await fetch(API_URL, {
             method: 'POST',
-           // mode: 'no-cors', // Importante: Apps Script no permite CORS, usamos no-cors
+            mode: 'no-cors',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify(payload)
           });
 
-          // Con no-cors, la respuesta no se puede leer, pero se envía.
-          // Asumimos éxito si no hay error de red.
+          // Con no-cors no podemos leer la respuesta, pero asumimos éxito
           showToast('✅ Guardado correctamente', 'success', 2000);
-          
-          // Opcional: refrescar datos para sincronizar
-          // loadData(); // Descomentar si se quiere recargar siempre
-          // Pero para no perder la posición, mejor no recargar completo.
-          // Podríamos actualizar localmente, pero es opcional.
-
         } catch (error) {
           console.error('Error al guardar:', error);
           showToast('Error al guardar: ' + (error.message || 'Error de red'), 'error', 4000);
@@ -516,40 +488,33 @@
 
       // ---------- MANEJAR BÚSQUEDA ----------
       function handleSearch() {
-        const filterText = searchInput.value;
-        currentFilter = filterText;
+        currentFilter = searchInput.value;
         if (allSections.length > 0) {
-          const filtered = applyFilter(allSections, filterText);
+          const filtered = applyFilter(allSections, currentFilter);
           renderGantt(filtered);
           // Ajustar mensaje si está vacío
           if (filtered.length === 0 || filtered.every(s => s.tasks.length === 0)) {
             statusMsg.style.display = 'block';
             statusText.textContent = 'No hay tareas que coincidan con la búsqueda.';
-            ganttContainer.querySelector('#gantt').style.display = 'none';
+            ganttEl.style.display = 'none';
           } else {
             statusMsg.style.display = 'none';
-            ganttContainer.querySelector('#gantt').style.display = 'block';
+            ganttEl.style.display = 'block';
           }
         }
       }
 
       // ---------- INICIALIZAR ----------
-      // Cargar datos al inicio
       loadData();
 
       // Eventos
-      refreshBtn.addEventListener('click', function() {
-        loadData();
-      });
+      refreshBtn.addEventListener('click', loadData);
 
-      // Búsqueda con debounce simple
       let searchTimeout = null;
       searchInput.addEventListener('input', function() {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(handleSearch, 300);
       });
-
-      // También permitir búsqueda con Enter
       searchInput.addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
           clearTimeout(searchTimeout);
@@ -557,13 +522,8 @@
         }
       });
 
-      // ---------- (Opcional) Exponer funciones globales para depuración ----------
-      window.__debug = {
-        loadData,
-        renderGantt,
-        saveTask,
-        allSections: () => allSections,
-      };
+      // Exponer utilidades para depuración (opcional)
+      window.__debug = { loadData, renderGantt, saveTask, allSections: () => allSections };
 
     })();
   </script>
